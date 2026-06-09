@@ -1,0 +1,24 @@
+[Unit]
+Description=Nighttime music playback (mpv to Bluetooth speaker)
+# Audio + bluetooth need to be up; this is a user unit so the user PipeWire/
+# WirePlumber session is already a dependency of the user manager.
+After=bluetooth.target
+
+[Service]
+Type=simple
+# The mpv IPC socket lives in the repo's run/ dir (always exists, so the Docker
+# container can bind-mount it 24/7). start-music defaults there; override with
+# MPV_SOCKET_DIR if the repo moves.
+# SPEAKER_MAC is sourced from host/speaker.env by start-music (gitignored).
+Environment=PLAYLIST=/home/littlemiss/Documents/dev/nightvibe/data/playlist.m3u
+Environment=VOLUME=70
+ExecStart=/usr/local/bin/start-music
+# At stop (08:00), free the speaker so the BT radio is available again.
+ExecStopPost=/usr/local/bin/bt-disconnect
+# bt-assert can fail if the speaker is off at 23:00; keep retrying so it starts
+# whenever the speaker comes online (within the 23:00-08:00 window).
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target

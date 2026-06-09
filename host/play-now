@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# On-demand single-track playback. Triggered by music-playnow.path when the app
+# writes run/playnow.request (containing one absolute track path). Gets a healthy
+# BT sink (ensure-sink) and plays JUST that one track, then exits — the service's
+# ExecStopPost disconnects the speaker so PC audio returns.
+#
+# This only runs when mpv is NOT already up: the app injects over the IPC socket
+# when a player is live (see app/mpv_ipc.play_file), and "start shuffle now"
+# stops this service first. The guard below is a belt-and-suspenders backstop.
+set -euo pipefail
+
+HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+
+# Load gitignored local config (SPEAKER_MAC, ...) if present.
+[[ -f "$HERE/speaker.env" ]] && source "$HERE/speaker.env"
+
+MAC="${SPEAKER_MAC:-AA:BB:CC:DD:EE:FF}"
+VOLUME="${VOLUME:-70}"
+SOCK_DIR="${MPV_SOCKET_DIR:-$(cd "$HERE/.." && pwd)/run}"
+SOCK="$SOCK_DIR/mpv.sock"
+REQ="$SOCK_DIR/playnow.request"
+
+log() { echo "[play-now] $*" >&2; }
+
+# Don't fight the nightly/shuffle player.
+if systemctl --user is-active --quiet music-night.service; then
+  log "music-night is active; refusing to start a second player"
+  exit 0
+fi
+
+[[ -f "$REQ" ]] || { log "no request file at $REQ"; exit 0; }
+TRACK="$(head -n1 "$REQ")"
+rm -f "$REQ"
+[[ -n "$TRACK" ]] || { log "empty request"; exit 0; }
+[[ -f "$TRACK" ]] || { log "track not found: $TRACK"; exit 1; }
+
+log "play-now: $TRACK"
+if ! SINK="$(SPEAKER_MAC="$MAC" "$HERE/ensure-sink")"; then
+  log "no healthy sink; giving up"
+  exit 1
+fi
+
+mkdir -p "$SOCK_DIR"
+rm -f "$SOCK"
+
+# Single file, no loop: mpv plays it once and exits (-> service goes inactive ->
+# ExecStopPost disconnects the speaker). The IPC socket stays live during the
+# song, so the app's transport controls (pause/skip/volume/status) still work.
+exec mpv --ao=pulse \
+  --audio-device="pulse/$SINK" \
+  --input-ipc-server="$SOCK" \
+  --volume="$VOLUME" \
+  --no-video --no-terminal \
+  "$TRACK"

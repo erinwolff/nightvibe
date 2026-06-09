@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Disconnect the Bluetooth speaker over D-Bus (BlueZ). Run as ExecStopPost at
+# 08:00 so the speaker frees its radio / idles off. Best-effort: never fails
+# the stop, even if the device is already gone.
+#
+# Usage: bt-disconnect [MAC]
+set -euo pipefail
+
+# Load gitignored local config (SPEAKER_MAC, ...). readlink -f resolves the
+# /usr/local/bin symlink back to this repo's host/ dir.
+__nv_dir="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+[[ -f "$__nv_dir/speaker.env" ]] && source "$__nv_dir/speaker.env"
+
+MAC="${1:-${SPEAKER_MAC:-AA:BB:CC:DD:EE:FF}}"
+DEV_PATH="/org/bluez/hci0/dev_${MAC//:/_}"
+
+dbus-send --system --print-reply --dest=org.bluez "$DEV_PATH" \
+  org.bluez.Device1.Disconnect >/dev/null 2>&1 || true
+
+echo "[bt-disconnect] disconnect requested for $MAC" >&2

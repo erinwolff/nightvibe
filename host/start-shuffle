@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Start the shuffle pool ON DEMAND (any time of day). Triggered by
+# music-shuffle.path when the app writes run/shuffle.request.
+#
+# This deliberately routes through the SAME music-night.service the nightly
+# timer uses, so there is exactly one owner of shuffle playback and the 08:00
+# stop timer still cleans it up. Starting the service by hand does NOT touch the
+# timers: the 23:00 start is a no-op if it's already running, and the 08:00 stop
+# fires as usual.
+set -euo pipefail
+
+log() { echo "[start-shuffle] $*" >&2; }
+
+# If a one-off "play now" track is currently playing, free the speaker/socket
+# first so the two players don't collide on the BT sink.
+if systemctl --user is-active --quiet music-playnow.service; then
+  log "stopping in-progress play-now track before shuffling"
+  systemctl --user stop music-playnow.service || true
+fi
+
+log "starting music-night.service (shuffle pool)"
+systemctl --user start music-night.service

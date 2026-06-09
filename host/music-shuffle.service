@@ -1,0 +1,9 @@
+[Unit]
+Description=nightvibe on-demand "start shuffle now" dispatcher
+
+[Service]
+Type=oneshot
+# start-shuffle stops any in-progress play-now track, then starts the regular
+# music-night.service (the single owner of shuffle playback). Kept separate from
+# music-night.service so it can run systemctl against it.
+ExecStart=/usr/local/bin/start-shuffle

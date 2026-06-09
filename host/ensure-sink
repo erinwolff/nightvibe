@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Connect the Bluetooth speaker and print a *healthy* PipeWire sink node on
+# stdout. "Healthy" means a short SILENT wav actually plays on it — this guards
+# against the stuck-A2DP-transport bug, where the sink exists but audio times
+# out (transport stays 'idle', sink SUSPENDED). On failure we restart the full
+# PipeWire stack (the only thing that reliably clears it), bring EasyEffects
+# back with its preset, reconnect, and retry once.
+#
+# Shared by start-music (nightly shuffle) and play-now (on-demand single track).
+# On success: prints sink node name, exit 0. On failure: exit 1.
+set -euo pipefail
+
+# Resolve symlinks so sibling files (bt-assert, silence.wav, ...) resolve to the
+# repo's host/ dir even when invoked via a /usr/local/bin symlink.
+HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+
+# Load gitignored local config (SPEAKER_MAC, ...) if present.
+[[ -f "$HERE/speaker.env" ]] && source "$HERE/speaker.env"
+
+MAC="${SPEAKER_MAC:-AA:BB:CC:DD:EE:FF}"
+SILENCE="$HERE/silence.wav"
+
+log() { echo "[ensure-sink] $*" >&2; }
+
+# Connect the speaker, then prove the audio path works by playing silence.
+# Echoes the resolved sink node name on stdout; non-zero if unhealthy.
+connect_and_verify() {
+  local sink
+  sink="$("$HERE/bt-assert" "$MAC")" || return 1
+  if paplay -d "$sink" "$SILENCE" >/dev/null 2>&1; then
+    echo "$sink"
+    return 0
+  fi
+  log "audio path unhealthy (silent probe failed on $sink)"
+  return 2
+}
+
+if SINK="$(connect_and_verify)"; then
+  echo "$SINK"
+  exit 0
+fi
+
+log "recovering: restarting PipeWire stack"
+systemctl --user restart pipewire pipewire-pulse wireplumber
+sleep 4
+# The stack restart drops EasyEffects; bring it back with the user's preset.
+"$HERE/ensure-easyeffects" || true
+
+if SINK="$(connect_and_verify)"; then
+  echo "$SINK"
+  exit 0
+fi
+
+log "audio path still unhealthy after stack restart; giving up"
+exit 1

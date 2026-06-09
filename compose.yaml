@@ -1,0 +1,28 @@
+services:
+  nightvibe:
+    build: .
+    container_name: nightvibe
+    restart: unless-stopped
+    # Run as the host user so the bind-mounted mpv socket (owned by uid 1000) is
+    # writeable — connecting to a unix socket needs write permission on it.
+    user: "1000:1000"
+    ports:
+      - "8323:8323"
+    environment:
+      NV_PORT: "8323"
+      NV_HOST: "0.0.0.0"
+      # mpv IPC socket, bind-mounted from the host's project run/ dir.
+      MPV_SOCKET: "/run/music-night/mpv.sock"
+      # On-demand request files the host watches (systemd .path units) to start
+      # one-off playback / the shuffle pool. Same run/ dir as the socket.
+      PLAYNOW_REQUEST: "/run/music-night/playnow.request"
+      SHUFFLE_REQUEST: "/run/music-night/shuffle.request"
+      # Library mounted at the SAME path as the host so playlist entries are
+      # valid for mpv (which runs on the host).
+      MUSIC_DIR: "/home/littlemiss/Music"
+      # Same file mpv reads on the host (./data is bind-mounted both places).
+      PLAYLIST_PATH: "/data/playlist.m3u"
+    volumes:
+      - "./run:/run/music-night"                            # mpv IPC socket (seam)
+      - "/home/littlemiss/Music:/home/littlemiss/Music:ro"  # library (read-only)
+      - "./data:/data"                                      # playlist.m3u (read-write)

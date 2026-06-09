@@ -1,0 +1,12 @@
+[Unit]
+Description=Watch for nightvibe "play now" requests
+
+[Path]
+# The app writes one absolute track path here when mpv is not already running.
+# PathModified fires on each write (inotify CLOSE_WRITE), re-arming after the
+# triggered service goes inactive.
+PathModified=/home/littlemiss/Documents/dev/nightvibe/run/playnow.request
+Unit=music-playnow.service
+
+[Install]
+WantedBy=default.target

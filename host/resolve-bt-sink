@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Print the PipeWire (pulse-compat) sink node name for a Bluetooth device,
+# matched on MAC address. The MAC-derived node name is stable across
+# reconnects, but we query pw-dump rather than guess the trailing profile
+# index. Prints nothing and exits non-zero if the sink is not present.
+#
+# Usage: resolve-bt-sink [MAC]
+set -euo pipefail
+
+# Load gitignored local config (SPEAKER_MAC, ...). readlink -f resolves the
+# /usr/local/bin symlink back to this repo's host/ dir.
+__nv_dir="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+[[ -f "$__nv_dir/speaker.env" ]] && source "$__nv_dir/speaker.env"
+
+MAC="${1:-${SPEAKER_MAC:-AA:BB:CC:DD:EE:FF}}"
+
+# pw-dump emits JSON on stdout; Python reads it from stdin (program via -c so
+# stdin is not consumed by the source itself). MAC is passed as argv[1].
+pw-dump | python3 -c '
+import json, sys
+mac = sys.argv[1].upper()
+data = json.load(sys.stdin)
+for obj in data:
+    props = (obj.get("info") or {}).get("props") or {}
+    if props.get("media.class") == "Audio/Sink" \
+       and str(props.get("api.bluez5.address", "")).upper() == mac:
+        print(props.get("node.name", ""))
+        sys.exit(0)
+sys.exit(1)
+' "$MAC"

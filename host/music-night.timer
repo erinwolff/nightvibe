@@ -1,0 +1,11 @@
+[Unit]
+Description=Start nighttime music at 23:00
+
+[Timer]
+OnCalendar=*-*-* 23:00:00
+# Catch a missed start (e.g. machine was off / asleep at 23:00) when it comes
+# back up inside the window.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

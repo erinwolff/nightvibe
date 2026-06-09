@@ -1,0 +1,18 @@
+# mpv IPC socket (created at runtime in run/)
+run/*
+!run/.gitkeep
+
+# local python
+__pycache__/
+*.pyc
+.venv/
+
+# local host config (real Bluetooth speaker MAC, etc.) — keep speaker.env.example
+host/speaker.env
+
+# personal playlists (absolute paths into the local music library)
+data/*.m3u
+
+# scratch
+*.tmp
+data/*.tmp

@@ -1,0 +1,11 @@
+[Unit]
+Description=Stop nighttime music at 08:00
+
+[Timer]
+OnCalendar=*-*-* 08:00:00
+# No Persistent here: a missed 08:00 stop is harmless (a later start/stop cycle
+# corrects it), and we don't want a catch-up stop firing mid-day after downtime.
+Persistent=false
+
+[Install]
+WantedBy=timers.target

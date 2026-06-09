@@ -1,0 +1,8 @@
+[Unit]
+Description=Stop nighttime music
+
+[Service]
+Type=oneshot
+# Stopping the playback unit sends SIGTERM to mpv (which start-music became via
+# exec) and runs its ExecStopPost=bt-disconnect.
+ExecStart=/usr/bin/systemctl --user stop music-night.service

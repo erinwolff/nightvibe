@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# (Re)start EasyEffects in service mode and load its input preset. Used by the
+# health-check recovery path: restarting the PipeWire stack drops EasyEffects,
+# and the user relies on it running with the 'voicechat' input preset.
+#
+# Idempotent: if already running, just (re)loads the preset.
+set -euo pipefail
+
+APP="com.github.wwmm.easyeffects"
+PRESET="${EE_PRESET:-voicechat}"
+
+if ! pgrep -x easyeffects >/dev/null 2>&1; then
+  echo "[ensure-easyeffects] starting service mode" >&2
+  setsid flatpak run --command=easyeffects "$APP" --service-mode --hide-window \
+    >/dev/null 2>&1 &
+  for _ in $(seq 1 10); do
+    pgrep -x easyeffects >/dev/null 2>&1 && break
+    sleep 1
+  done
+fi
+
+# Load the input preset (best-effort; harmless if already applied).
+flatpak run --command=easyeffects "$APP" -l "$PRESET" >/dev/null 2>&1 || true
+echo "[ensure-easyeffects] running with input preset: $PRESET" >&2

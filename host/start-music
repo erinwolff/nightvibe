@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Get a healthy Bluetooth sink (ensure-sink: connect + health-check + recovery),
+# then exec mpv on the shuffle pool. Using `exec` makes this script *become*
+# mpv, so the 08:00 stop signal hits mpv directly with no wrapper in between.
+#
+# Run by music-night.service — both the nightly timer AND on-demand "start
+# shuffle now" (start-shuffle) route through that same service, so this is the
+# single owner of shuffle playback.
+set -euo pipefail
+
+# Resolve symlinks so sibling scripts resolve to the repo's host/ dir even when
+# invoked via the /usr/local/bin symlink.
+HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+
+# Load gitignored local config (SPEAKER_MAC, ...) if present.
+[[ -f "$HERE/speaker.env" ]] && source "$HERE/speaker.env"
+
+MAC="${SPEAKER_MAC:-AA:BB:CC:DD:EE:FF}"
+PLAYLIST="${PLAYLIST:-/home/littlemiss/Documents/dev/nightvibe/data/playlist.m3u}"
+VOLUME="${VOLUME:-70}"
+
+# Socket lives in a project-local run/ dir that always exists (so the Docker
+# container can bind-mount it 24/7, even while mpv isn't running). Override with
+# MPV_SOCKET_DIR.
+SOCK_DIR="${MPV_SOCKET_DIR:-$(cd "$HERE/.." && pwd)/run}"
+SOCK="$SOCK_DIR/mpv.sock"
+
+log() { echo "[start-music] $*" >&2; }
+
+mkdir -p "$SOCK_DIR"
+rm -f "$SOCK"
+
+if ! SINK="$(SPEAKER_MAC="$MAC" "$HERE/ensure-sink")"; then
+  log "no healthy sink; failing so the service retries"
+  exit 1
+fi
+log "audio path healthy, sink=$SINK"
+
+# mpv 0.34 has no native pipewire AO; route through PipeWire's pulse-compat layer
+# with an explicit device so we never fight the system default sink.
+exec mpv --ao=pulse \
+  --audio-device="pulse/$SINK" \
+  --shuffle --loop-playlist=inf \
+  --input-ipc-server="$SOCK" \
+  --volume="$VOLUME" \
+  --no-video --no-terminal \
+  "$PLAYLIST"

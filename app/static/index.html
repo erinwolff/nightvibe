@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>nightvibe</title>
+<style>
+  :root { --bg:#0e1116; --card:#171c26; --line:#262d3a; --fg:#e6e9ef; --mut:#8b93a7; --acc:#7c5cff; --danger:#e2557b; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  .wrap { max-width:680px; margin:0 auto; padding:16px; }
+  h1 { font-size:20px; margin:8px 0 16px; letter-spacing:.5px; }
+  h1 span { color:var(--acc); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:16px; }
+  .np-title { font-size:18px; font-weight:600; }
+  .np-sub { color:var(--mut); font-size:14px; margin-top:2px; }
+  .np-idle { color:var(--mut); }
+  .time { color:var(--mut); font-size:13px; margin-top:8px; }
+  .bar { height:5px; background:var(--line); border-radius:3px; margin-top:6px; overflow:hidden; }
+  .bar > div { height:100%; background:var(--acc); width:0%; }
+  .controls { display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+  button { background:#222a38; color:var(--fg); border:1px solid var(--line); border-radius:10px;
+           padding:10px 14px; font-size:15px; cursor:pointer; }
+  button:hover { border-color:var(--acc); }
+  button:active { transform:translateY(1px); }
+  button.acc { background:var(--acc); border-color:var(--acc); }
+  button.danger { color:var(--danger); }
+  button.sm { padding:5px 10px; font-size:13px; }
+  .vol { display:flex; align-items:center; gap:10px; margin-top:14px; }
+  .vol input { flex:1; accent-color:var(--acc); }
+  .sect-h { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .sect-h h2 { font-size:15px; margin:0; }
+  .count { color:var(--mut); font-size:13px; }
+  .search { display:flex; gap:8px; margin-bottom:10px; }
+  .search input { flex:1; background:#0f1420; color:var(--fg); border:1px solid var(--line);
+                  border-radius:10px; padding:9px 12px; font-size:15px; }
+  .search input:focus { outline:none; border-color:var(--acc); }
+  .crumbs { color:var(--mut); font-size:13px; margin-bottom:10px; word-break:break-word; }
+  .hint { color:var(--mut); font-size:12px; margin-bottom:8px; }
+  .crumbs a { color:var(--acc); cursor:pointer; text-decoration:none; }
+  .row { display:flex; align-items:center; gap:8px; padding:7px 0; border-top:1px solid var(--line); }
+  .row:first-child { border-top:none; }
+  .row .name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .row .name.dir { color:var(--acc); cursor:pointer; }
+  .list { max-height:300px; overflow:auto; }
+  .empty { color:var(--mut); font-size:14px; padding:8px 0; }
+  .toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:var(--acc);
+           color:#fff; padding:8px 16px; border-radius:20px; font-size:13px; opacity:0; transition:opacity .2s; }
+  .toast.show { opacity:1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>night<span>vibe</span></h1>
+
+  <!-- Now playing -->
+  <div class="card" id="np-card">
+    <div id="np-idle" class="np-idle">Loading…</div>
+    <div id="np-live" style="display:none">
+      <div class="np-title" id="np-title">—</div>
+      <div class="np-sub" id="np-sub">—</div>
+      <div class="time"><span id="np-time">0:00 / 0:00</span></div>
+      <div class="bar"><div id="np-progress"></div></div>
+      <div class="controls">
+        <button onclick="ctl('prev')">⏮ Prev</button>
+        <button class="acc" id="np-pause" onclick="ctl('pause')">⏸ Pause</button>
+        <button onclick="ctl('skip')">⏭ Skip</button>
+        <button class="danger" onclick="stopPlayback()">⏹ Stop</button>
+      </div>
+      <div class="vol">
+        🔊 <input type="range" id="vol" min="0" max="130" value="70"
+                  onchange="setVol(this.value)"><span id="vol-val" class="count">70</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shuffle pool -->
+  <div class="card">
+    <div class="sect-h"><h2>Shuffle pool</h2>
+      <div style="display:flex; align-items:center; gap:10px">
+        <span class="count" id="pool-count">0 tracks</span>
+        <button class="sm acc" id="shuffle-now" onclick="shuffleNow()" style="display:none">▶ Shuffle now</button>
+        <button class="sm danger" id="clear-pool" onclick="clearPool()" style="display:none">Clear all</button>
+      </div>
+    </div>
+    <div class="list" id="pool"></div>
+  </div>
+
+  <!-- Library browser -->
+  <div class="card">
+    <div class="sect-h"><h2>Library</h2>
+      <button class="sm acc" id="add-folder" onclick="addFolder()">+ Add this folder</button>
+    </div>
+    <div class="search">
+      <input id="q" type="search" placeholder="Search albums &amp; tracks…" oninput="onSearchInput()">
+      <button class="sm" id="clear-search" onclick="clearSearch()" style="display:none">✕ Clear</button>
+    </div>
+    <div class="crumbs" id="crumbs"></div>
+    <div class="hint" id="search-hint" style="display:none"></div>
+    <div class="list" id="browse"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+let curDir = "";
+
+function fmt(t){ t=Math.max(0,Math.floor(t||0)); return Math.floor(t/60)+":"+String(t%60).padStart(2,"0"); }
+function toast(m){ const t=document.getElementById("toast"); t.textContent=m; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),1600); }
+async function api(path, opts){ const r=await fetch(path, opts); return r.json(); }
+function post(path, body){ return api(path, {method:"POST", headers:{"Content-Type":"application/json"}, body: body?JSON.stringify(body):null}); }
+
+// --- now playing ---
+async function refreshStatus(){
+  let s; try { s = await api("/api/status"); } catch(e){ return; }
+  const idle=document.getElementById("np-idle"), live=document.getElementById("np-live");
+  if(!s.playing){
+    idle.style.display=""; live.style.display="none";
+    idle.textContent="Nothing playing. Shuffle the pool or play any track below — the nightly 23:00–08:00 run is automatic.";
+    return;
+  }
+  idle.style.display="none"; live.style.display="";
+  document.getElementById("np-title").textContent = s.title || "(unknown)";
+  const sub=[s.artist, s.album].filter(Boolean).join(" — ");
+  document.getElementById("np-sub").textContent = sub || "";
+  document.getElementById("np-time").textContent = fmt(s.position)+" / "+fmt(s.duration)
+      + (s.playlist_pos? "   ·   #"+s.playlist_pos+"/"+s.playlist_count : "");
+  document.getElementById("np-progress").style.width = s.duration? (100*s.position/s.duration)+"%" : "0%";
+  document.getElementById("np-pause").textContent = s.paused? "▶ Play" : "⏸ Pause";
+  const vol=document.getElementById("vol");
+  if(document.activeElement!==vol && s.volume!=null){ vol.value=Math.round(s.volume); document.getElementById("vol-val").textContent=Math.round(s.volume); }
+}
+async function ctl(action){ const r=await post("/api/"+action); if(!r.ok) toast("Not playing"); setTimeout(refreshStatus,200); }
+async function setVol(v){ document.getElementById("vol-val").textContent=v; const r=await post("/api/volume",{volume:+v}); if(!r.ok) toast("Not playing"); }
+async function stopPlayback(){ if(!confirm("Stop playback now?")) return; const r=await post("/api/stop"); toast(r.ok?"Stopped":"Not playing"); setTimeout(refreshStatus,300); }
+
+// --- on-demand playback ---
+async function playNow(path, name){
+  const r=await post("/api/play-now",{path});
+  if(r && r.mode==="live") toast("▶ "+name);
+  else if(r && r.mode==="starting") toast("Connecting speaker…");
+  else toast((r && r.detail) || "Couldn't play");
+  setTimeout(refreshStatus, 1500);
+}
+async function shuffleNow(){
+  const r=await post("/api/shuffle-now");
+  if(r && r.ok) toast("Starting shuffle ("+r.count+" track"+(r.count===1?"":"s")+")…");
+  else toast((r && r.detail) || "Couldn't start");
+  setTimeout(refreshStatus, 1500);
+}
+// A small ▶ button that plays one track immediately (any time of day).
+function playBtn(t){
+  const b=document.createElement("button"); b.className="sm"; b.textContent="▶";
+  b.title="Play now"; b.onclick=()=>playNow(t.path, t.name);
+  return b;
+}
+
+// --- pool ---
+async function clearPool(){
+  const d=await api("/api/playlist");
+  if(!d.count){ toast("Pool already empty"); return; }
+  if(!confirm("Remove all "+d.count+" tracks from the shuffle pool?")) return;
+  await post("/api/playlist/reorder",{paths:[]});
+  refreshPool(); toast("Pool cleared");
+}
+async function refreshPool(){
+  const d=await api("/api/playlist");
+  document.getElementById("pool-count").textContent = d.count+" track"+(d.count===1?"":"s");
+  document.getElementById("clear-pool").style.display = d.count? "" : "none";
+  document.getElementById("shuffle-now").style.display = d.count? "" : "none";
+  const el=document.getElementById("pool");
+  if(!d.count){ el.innerHTML='<div class="empty">Empty — add tracks or folders below.</div>'; return; }
+  el.innerHTML="";
+  d.tracks.forEach(t=>{
+    const row=document.createElement("div"); row.className="row";
+    row.innerHTML=`<span class="name" title="${t.name}">${t.name}</span>`;
+    const b=document.createElement("button"); b.className="sm danger"; b.textContent="Remove";
+    b.onclick=async()=>{ await post("/api/playlist/remove",{paths:[t.path]}); refreshPool(); toast("Removed"); };
+    row.appendChild(playBtn(t)); row.appendChild(b); el.appendChild(row);
+  });
+}
+
+// --- browser ---
+async function refreshBrowse(){
+  let d; try { d=await api("/api/browse?path="+encodeURIComponent(curDir)); } catch(e){ return; }
+  curDir = d.path;
+  // breadcrumbs
+  const cr=document.getElementById("crumbs"); cr.innerHTML="";
+  const root=document.createElement("a"); root.textContent="Music"; root.onclick=()=>{curDir="";refreshBrowse();}; cr.appendChild(root);
+  if(curDir){ let acc=""; curDir.split("/").forEach(part=>{ acc=acc?acc+"/"+part:part; const a=document.createElement("a"); const p=acc;
+    cr.appendChild(document.createTextNode(" / ")); a.textContent=part; a.onclick=()=>{curDir=p;refreshBrowse();}; cr.appendChild(a); }); }
+  document.getElementById("add-folder").style.display = curDir? "" : "none";
+
+  const el=document.getElementById("browse"); el.innerHTML="";
+  d.dirs.forEach(dir=>{
+    const row=document.createElement("div"); row.className="row";
+    const n=document.createElement("span"); n.className="name dir"; n.textContent="📁 "+dir.name;
+    n.onclick=()=>{ curDir = d.path? d.path+"/"+dir.name : dir.name; refreshBrowse(); };
+    row.appendChild(n); el.appendChild(row);
+  });
+  d.tracks.forEach(t=>{
+    const row=document.createElement("div"); row.className="row";
+    row.innerHTML=`<span class="name" title="${t.name}">🎵 ${t.name}</span>`;
+    const b=document.createElement("button"); b.className="sm"; b.textContent="+ Add";
+    b.onclick=async()=>{ const r=await post("/api/playlist/add",{paths:[t.path]}); refreshPool(); toast(r.added?"Added":"Already in pool"); };
+    row.appendChild(playBtn(t)); row.appendChild(b); el.appendChild(row);
+  });
+  if(!d.dirs.length && !d.tracks.length) el.innerHTML='<div class="empty">Empty folder.</div>';
+}
+async function addFolder(){
+  const r=await post("/api/playlist/add-dir",{path:curDir});
+  refreshPool(); toast("Added "+r.added+" track"+(r.added===1?"":"s"));
+}
+
+// --- search ---
+let searchTimer=null;
+function onSearchInput(){ clearTimeout(searchTimer); searchTimer=setTimeout(doSearch, 250); }
+async function doSearch(){
+  const q=document.getElementById("q").value.trim();
+  document.getElementById("clear-search").style.display = q? "" : "none";
+  if(!q){ clearSearch(); return; }
+  let d; try { d=await api("/api/search?q="+encodeURIComponent(q)); } catch(e){ return; }
+  // search mode: hide browse chrome
+  document.getElementById("crumbs").style.display="none";
+  document.getElementById("add-folder").style.display="none";
+  const hint=document.getElementById("search-hint");
+  const total=d.dirs.length+d.tracks.length;
+  hint.style.display=""; hint.textContent = total? (d.dirs.length+" folder"+(d.dirs.length===1?"":"s")+", "+d.tracks.length+" track"+(d.tracks.length===1?"":"s")+(d.truncated?" (showing first matches)":"")) : "No matches.";
+  const el=document.getElementById("browse"); el.innerHTML="";
+  d.dirs.forEach(dir=>{
+    const row=document.createElement("div"); row.className="row";
+    const n=document.createElement("span"); n.className="name dir"; n.textContent="📁 "+dir.rel;
+    n.onclick=()=>{ curDir=dir.rel; clearSearch(); refreshBrowse(); };
+    row.appendChild(n);
+    const b=document.createElement("button"); b.className="sm acc"; b.textContent="+ Add folder";
+    b.onclick=async()=>{ const r=await post("/api/playlist/add-dir",{path:dir.rel}); refreshPool(); toast("Added "+r.added+" track"+(r.added===1?"":"s")); };
+    row.appendChild(b); el.appendChild(row);
+  });
+  d.tracks.forEach(t=>{
+    const row=document.createElement("div"); row.className="row";
+    row.innerHTML=`<span class="name" title="${t.name}">🎵 ${t.name}</span>`;
+    const b=document.createElement("button"); b.className="sm"; b.textContent="+ Add";
+    b.onclick=async()=>{ const r=await post("/api/playlist/add",{paths:[t.path]}); refreshPool(); toast(r.added?"Added":"Already in pool"); };
+    row.appendChild(playBtn(t)); row.appendChild(b); el.appendChild(row);
+  });
+  if(!total) el.innerHTML='<div class="empty">No matches for “'+q+'”.</div>';
+}
+function clearSearch(){
+  document.getElementById("q").value="";
+  document.getElementById("clear-search").style.display="none";
+  document.getElementById("search-hint").style.display="none";
+  document.getElementById("crumbs").style.display="";
+  refreshBrowse();
+}
+
+// --- boot ---
+refreshStatus(); refreshPool(); refreshBrowse();
+setInterval(refreshStatus, 2000);
+</script>
+</body>
+</html>

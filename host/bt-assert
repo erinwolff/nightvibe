@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# Connect the Bluetooth speaker over D-Bus (BlueZ), then verify its A2DP sink
+# actually appears in PipeWire before returning. This is the reliability core
+# of the whole project: "connected" != "sink exists" != "sink is targetable".
+#
+# On success: prints the resolved PipeWire sink node name on stdout, exit 0.
+# On failure: logs to stderr, exit non-zero (so the service fails and retries).
+#
+# Usage: bt-assert [MAC]
+set -euo pipefail
+
+# Load gitignored local config (SPEAKER_MAC, ...). readlink -f resolves the
+# /usr/local/bin symlink back to this repo's host/ dir.
+__nv_dir="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+[[ -f "$__nv_dir/speaker.env" ]] && source "$__nv_dir/speaker.env"
+
+MAC="${1:-${SPEAKER_MAC:-AA:BB:CC:DD:EE:FF}}"
+DEV_PATH="/org/bluez/hci0/dev_${MAC//:/_}"
+# Resolve symlinks so resolve-bt-sink resolves to the repo's host/ dir even when
+# invoked via the /usr/local/bin symlink.
+HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+
+CONNECT_RETRIES="${CONNECT_RETRIES:-6}"   # connect attempts before giving up
+CONNECT_BACKOFF="${CONNECT_BACKOFF:-3}"   # initial seconds between attempts (grows)
+SINK_TIMEOUT="${SINK_TIMEOUT:-15}"        # seconds to wait for the sink after connect
+
+log() { echo "[bt-assert] $*" >&2; }
+
+is_connected() {
+  dbus-send --system --print-reply --dest=org.bluez "$DEV_PATH" \
+    org.freedesktop.DBus.Properties.Get \
+    string:org.bluez.Device1 string:Connected 2>/dev/null \
+    | grep -q "boolean true"
+}
+
+do_connect() {
+  dbus-send --system --print-reply --dest=org.bluez "$DEV_PATH" \
+    org.bluez.Device1.Connect >/dev/null 2>&1
+}
+
+# 1. Ensure connected, with retry/backoff.
+backoff="$CONNECT_BACKOFF"
+for ((i = 1; i <= CONNECT_RETRIES; i++)); do
+  if is_connected; then
+    log "already connected"
+    break
+  fi
+  log "connect attempt $i/$CONNECT_RETRIES"
+  do_connect || true
+  sleep 2
+  if is_connected; then
+    log "connected on attempt $i"
+    break
+  fi
+  if ((i < CONNECT_RETRIES)); then
+    sleep "$backoff"
+    backoff=$((backoff + 2))
+  fi
+done
+
+if ! is_connected; then
+  log "FAILED to connect $MAC after $CONNECT_RETRIES attempts"
+  exit 1
+fi
+
+# 2. Verify the A2DP sink actually shows up in PipeWire. Connecting the device
+#    does not mean the audio sink exists yet, and it may take a moment.
+for ((t = 0; t < SINK_TIMEOUT; t++)); do
+  if sink="$("$HERE/resolve-bt-sink" "$MAC" 2>/dev/null)" && [[ -n "$sink" ]]; then
+    log "A2DP sink present: $sink"
+    echo "$sink"
+    exit 0
+  fi
+  sleep 1
+done
+
+log "connected but A2DP sink never appeared within ${SINK_TIMEOUT}s"
+exit 1

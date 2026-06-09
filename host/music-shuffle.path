@@ -1,0 +1,11 @@
+[Unit]
+Description=Watch for nightvibe "start shuffle now" requests
+
+[Path]
+# The app touches this file to start the shuffle pool on demand. Content is
+# ignored; only the write event matters.
+PathModified=/home/littlemiss/Documents/dev/nightvibe/run/shuffle.request
+Unit=music-shuffle.service
+
+[Install]
+WantedBy=default.target

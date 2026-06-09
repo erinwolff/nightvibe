@@ -1,0 +1,13 @@
+[Unit]
+Description=nightvibe on-demand single-track playback ("play now")
+After=bluetooth.target
+# Never run alongside the shuffle player.
+Conflicts=music-night.service
+
+[Service]
+Type=simple
+# SPEAKER_MAC is sourced from host/speaker.env by play-now (gitignored).
+Environment=VOLUME=70
+ExecStart=/usr/local/bin/play-now
+# When the single track ends (mpv exits), free the speaker so PC audio returns.
+ExecStopPost=/usr/local/bin/bt-disconnect
