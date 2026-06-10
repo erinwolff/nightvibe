@@ -19,6 +19,11 @@ import playlist
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 
+# Shared state: the last-set volume, persisted so the host's start-music launches
+# mpv at it each night instead of resetting to the default (see host/start-music).
+# Written to the bind-mounted ./data dir, the same seam as the playlist.
+VOLUME_FILE = Path(os.environ.get("VOLUME_FILE", "/data/volume"))
+
 app = FastAPI(title="nightvibe")
 mpv = mpv_ipc.MpvIPC()
 
@@ -61,9 +66,25 @@ class VolumeReq(BaseModel):
     volume: float
 
 
+def _save_volume(volume: float) -> None:
+    """Persist the last-set volume (0-130) so the nightly host player starts at it.
+    Best-effort and atomic: a write failure must never break the volume request."""
+    try:
+        vol = max(0, min(130, int(round(volume))))
+        tmp = VOLUME_FILE.with_suffix(".tmp")
+        tmp.write_text(f"{vol}\n", encoding="utf-8")
+        os.replace(tmp, VOLUME_FILE)
+    except OSError:
+        pass
+
+
 @app.post("/api/volume")
 def volume(req: VolumeReq):
-    return {"ok": mpv.set_volume(req.volume)}
+    # Persist regardless of whether mpv is live: the slider only POSTs on a real
+    # user action, so this is always the intended volume for the next launch too.
+    ok = mpv.set_volume(req.volume)
+    _save_volume(req.volume)
+    return {"ok": ok}
 
 
 class PlayReq(BaseModel):

@@ -17,7 +17,16 @@ HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 
 MAC="${SPEAKER_MAC:-AA:BB:CC:DD:EE:FF}"
 PLAYLIST="${PLAYLIST:-/home/littlemiss/Documents/dev/nightvibe/data/playlist.m3u}"
-VOLUME="${VOLUME:-70}"
+
+# Volume persists across nights: the app writes the last-set value to data/volume
+# (app/main._save_volume); launch mpv at it. An explicit VOLUME env still wins.
+VOL_FILE="${VOLUME_FILE:-$(cd "$HERE/.." && pwd)/data/volume}"
+DEFAULT_VOLUME=70
+if [[ -r "$VOL_FILE" ]]; then
+  read -r v < "$VOL_FILE" || v=""
+  [[ "$v" =~ ^[0-9]+$ ]] && ((v <= 130)) && DEFAULT_VOLUME="$v"
+fi
+VOLUME="${VOLUME:-$DEFAULT_VOLUME}"
 
 # Socket lives in a project-local run/ dir that always exists (so the Docker
 # container can bind-mount it 24/7, even while mpv isn't running). Override with

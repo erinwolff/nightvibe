@@ -13,6 +13,9 @@ host/speaker.env
 # personal playlists (absolute paths into the local music library)
 data/*.m3u
 
+# persisted runtime state (last-set volume, written by the app)
+data/volume
+
 # scratch
 *.tmp
 data/*.tmp

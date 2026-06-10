@@ -7,7 +7,8 @@ Conflicts=music-night.service
 [Service]
 Type=simple
 # SPEAKER_MAC is sourced from host/speaker.env by play-now (gitignored).
-Environment=VOLUME=70
+# VOLUME intentionally unset: play-now reads the persisted data/volume (the app's
+# last-set value), falling back to 70. Set VOLUME here to force a fixed level.
 ExecStart=/usr/local/bin/play-now
 # When the single track ends (mpv exits), free the speaker so PC audio returns.
 ExecStopPost=/usr/local/bin/bt-disconnect

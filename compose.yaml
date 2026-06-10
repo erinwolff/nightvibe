@@ -22,6 +22,9 @@ services:
       MUSIC_DIR: "/home/littlemiss/Music"
       # Same file mpv reads on the host (./data is bind-mounted both places).
       PLAYLIST_PATH: "/data/playlist.m3u"
+      # Last-set volume, persisted here so the host's start-music launches mpv at
+      # it each night instead of the 70 default. Same bind-mounted ./data dir.
+      VOLUME_FILE: "/data/volume"
     volumes:
       - "./run:/run/music-night"                            # mpv IPC socket (seam)
       - "/home/littlemiss/Music:/home/littlemiss/Music:ro"  # library (read-only)

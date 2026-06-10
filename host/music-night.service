@@ -11,7 +11,8 @@ Type=simple
 # MPV_SOCKET_DIR if the repo moves.
 # SPEAKER_MAC is sourced from host/speaker.env by start-music (gitignored).
 Environment=PLAYLIST=/home/littlemiss/Documents/dev/nightvibe/data/playlist.m3u
-Environment=VOLUME=70
+# VOLUME intentionally unset: start-music reads the persisted data/volume (the
+# app's last-set value), falling back to 70. Set VOLUME here to force a fixed level.
 ExecStart=/usr/local/bin/start-music
 # At stop (08:00), free the speaker so the BT radio is available again.
 ExecStopPost=/usr/local/bin/bt-disconnect
