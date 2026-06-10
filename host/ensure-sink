@@ -2,10 +2,11 @@
 # Connect the Bluetooth speaker and print a *healthy* PipeWire sink node on
 # stdout. "Healthy" means a short SILENT wav actually plays on it — this guards
 # against the stuck-A2DP-transport bug, where the sink exists but audio times
-# out (transport stays 'idle', sink SUSPENDED). Recovery is two-tier: first
-# disconnect any BLOCKER_MACS (other speakers hogging the BT adapter so the
-# target never gets a sink) and retry, then if still unhealthy restart the full
-# PipeWire stack, bring EasyEffects back with its preset, reconnect, and retry.
+# out (transport stays 'idle', sink SUSPENDED). Before connecting we proactively
+# disconnect any BLOCKER_MACS (other speakers sharing the BT adapter): a blocker
+# doesn't stop the target from connecting, but its contention corrupts the
+# target's A2DP stream so it connects yet plays silence. If the probe still fails
+# we restart the full PipeWire stack, bring EasyEffects back, reconnect, retry.
 #
 # Shared by start-music (nightly shuffle) and play-now (on-demand single track).
 # On success: prints sink node name, exit 0. On failure: exit 1.
@@ -19,9 +20,9 @@ HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 [[ -f "$HERE/speaker.env" ]] && source "$HERE/speaker.env"
 
 MAC="${SPEAKER_MAC:-AA:BB:CC:DD:EE:FF}"
-# Other BT speakers that, while connected, can hog the adapter and stop the
-# target from connecting. Disconnected as a first recovery step before the
-# heavier PipeWire-stack restart. Space-separated MACs, set in speaker.env.
+# Other BT speakers that share the adapter and corrupt the target's A2DP stream
+# while connected. Disconnected proactively (below) before we connect the target.
+# Space-separated MACs, set in speaker.env.
 BLOCKER_MACS="${BLOCKER_MACS:-}"
 SILENCE="$HERE/silence.wav"
 
@@ -40,25 +41,21 @@ connect_and_verify() {
   return 2
 }
 
-if SINK="$(connect_and_verify)"; then
-  echo "$SINK"
-  exit 0
-fi
-
-# First-line recovery: a competing BT speaker may be holding the adapter so the
-# target never gets an A2DP sink. Disconnect known blockers, then retry before
-# the heavier full-stack restart.
+# Proactively free the BT radio BEFORE connecting: a blocker speaker doesn't stop
+# the target from connecting, it corrupts the target's A2DP stream so it plays
+# silence. Disconnecting on a connect *failure* would never catch that, so do it
+# up front, every startup. Best-effort; a no-op if the blocker isn't connected.
 if [[ -n "${BLOCKER_MACS// }" ]]; then
   for blocker in $BLOCKER_MACS; do
     log "disconnecting blocker $blocker to free the BT radio"
     "$HERE/bt-disconnect" "$blocker" || true
   done
   sleep 2
-  if SINK="$(connect_and_verify)"; then
-    echo "$SINK"
-    exit 0
-  fi
-  log "still no healthy sink after disconnecting blockers"
+fi
+
+if SINK="$(connect_and_verify)"; then
+  echo "$SINK"
+  exit 0
 fi
 
 log "recovering: restarting PipeWire stack"
