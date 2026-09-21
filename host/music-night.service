@@ -18,7 +18,14 @@ ExecStart=/usr/local/bin/start-music
 ExecStopPost=/usr/local/bin/bt-disconnect
 # bt-assert can fail if the speaker is off at 23:00; keep retrying so it starts
 # whenever the speaker comes online (within the 23:00-08:00 window).
-Restart=on-failure
+#
+# Restart=always, not on-failure: when the A2DP transport drops mid-night
+# (wireplumber logs "Failure in Bluetooth audio transport"), mpv loses its audio
+# device and exits *successfully* — so on-failure never fired and the night just
+# went silent until 08:00 (this is what happened 2026-09-20 at 23:26). An explicit
+# `systemctl stop` (how music-stop.service ends the night at 08:00) still never
+# triggers a restart, so always is safe here.
+Restart=always
 RestartSec=30
 
 [Install]
