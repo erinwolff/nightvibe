@@ -1,24 +1,57 @@
 #!/usr/bin/env bash
-# (Re)start EasyEffects in service mode and load its input preset. Used by the
-# health-check recovery path: restarting the PipeWire stack drops EasyEffects,
-# and the user relies on it running with the 'voicechat' input preset.
+# (Re)start EasyEffects in service mode, so the user's mic chain survives the
+# recovery path's PipeWire stack restart.
 #
-# Idempotent: if already running, just (re)loads the preset.
+# Why this is needed (verified 2026-09-21 by restarting the stack live):
+# `systemctl --user restart pipewire pipewire-pulse wireplumber` does not merely
+# disconnect EasyEffects, it kills it — the process dies, its easyeffects_sink /
+# easyeffects_source nodes vanish, and app-com.github.wwmm.easyeffects@autostart
+# .service goes to 'failed'. Nothing brings it back on its own, so without this
+# the mic chain stays dead until the next login.
+#
+# What this deliberately does NOT do: load a preset. The mic's own autoload rule
+# (data/easyeffects/autoload/input/<samson>:Microphone.json -> voicechat-tuned)
+# reapplies the preset by itself the moment the device re-appears — confirmed in
+# that same test, where relaunching with no `-l` at all came back on
+# voicechat-tuned. An explicit `-l` here was redundant, and worse, unverifiable:
+# EasyEffects exits 0 even for a preset that does not exist, so it only prints
+# "Specified preset does not exist." and carries on. That is how a wrong preset
+# name sat here unnoticed while the script logged that it had loaded it.
+#
+# Idempotent: a no-op if EasyEffects is already up.
 set -euo pipefail
 
 APP="com.github.wwmm.easyeffects"
-PRESET="${EE_PRESET:-voicechat}"
+# The systemd unit the XDG autostart generator makes from
+# ~/.config/autostart/<APP>.desktop. Preferred over a bare `flatpak run` because
+# restarting it also clears the 'failed' state the stack restart leaves behind,
+# and keeps EasyEffects in the scope the desktop session expects.
+UNIT="app-${APP}@autostart.service"
 
-if ! pgrep -x easyeffects >/dev/null 2>&1; then
-  echo "[ensure-easyeffects] starting service mode" >&2
-  setsid flatpak run --command=easyeffects "$APP" --service-mode --hide-window \
-    >/dev/null 2>&1 &
-  for _ in $(seq 1 10); do
-    pgrep -x easyeffects >/dev/null 2>&1 && break
-    sleep 1
-  done
+log() { echo "[ensure-easyeffects] $*" >&2; }
+
+if pgrep -x easyeffects >/dev/null 2>&1; then
+  log "already running"
+  exit 0
 fi
 
-# Load the input preset (best-effort; harmless if already applied).
-flatpak run --command=easyeffects "$APP" -l "$PRESET" >/dev/null 2>&1 || true
-echo "[ensure-easyeffects] running with input preset: $PRESET" >&2
+if systemctl --user list-unit-files "$UNIT" >/dev/null 2>&1 \
+   && systemctl --user restart "$UNIT" >/dev/null 2>&1; then
+  log "restarted via $UNIT"
+else
+  log "$UNIT unavailable; falling back to a detached flatpak run"
+  setsid flatpak run --command=easyeffects "$APP" --service-mode --hide-window \
+    >/dev/null 2>&1 &
+fi
+
+for _ in $(seq 1 15); do
+  pgrep -x easyeffects >/dev/null 2>&1 && break
+  sleep 1
+done
+
+# Report what actually happened, not what was attempted.
+if pgrep -x easyeffects >/dev/null 2>&1; then
+  log "running (preset reapplied by the mic's autoload rule)"
+else
+  log "WARNING: failed to start — mic processing is down until the next login"
+fi
