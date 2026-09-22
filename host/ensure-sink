@@ -53,9 +53,23 @@ if [[ -n "${BLOCKER_MACS// }" ]]; then
   sleep 2
 fi
 
-if SINK="$(connect_and_verify)"; then
+rc=0
+SINK="$(connect_and_verify)" || rc=$?
+if (( rc == 0 )); then
   echo "$SINK"
   exit 0
+fi
+
+# rc 1 = the speaker never connected at all. Restarting the PipeWire stack cannot
+# wake a speaker that is off, out of range or asleep, so doing it here is pure
+# collateral damage — it kills EasyEffects and drops every other audio client on
+# the box. On 2026-09-21 the speaker was switched off at 23:25 and the service
+# retried until 08:00: 161 restarts, each one bouncing the whole audio stack.
+# Only rc 2 (sink present, silent probe failed) is the stuck-transport case the
+# restart actually cures.
+if (( rc == 1 )); then
+  log "speaker did not connect; not touching the PipeWire stack (it cannot wake a speaker that is off)"
+  exit 1
 fi
 
 log "recovering: restarting PipeWire stack"
