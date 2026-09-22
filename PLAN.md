@@ -238,9 +238,23 @@ The failure-prone core. Build and hammer it.
 - **Health-check + auto-recovery (in `start-music`):** after `bt-assert`, push a
   short SILENT wav (`host/silence.wav`) to the sink. If it fails (stuck transport),
   restart the full PipeWire stack, run `host/ensure-easyeffects` (relaunches
-  EasyEffects in service mode and reloads the **voicechat** input preset — the user
-  relies on it), reconnect, and retry once. EasyEffects recovery is mandatory
-  because a PipeWire restart drops it. See [[reference-easyeffects]].
+  EasyEffects in service mode), reconnect, and retry once. EasyEffects recovery is
+  mandatory because a PipeWire restart drops it. See [[reference-easyeffects]].
+  - *Verified 2026-09-21* by restarting the stack live: it does not just disconnect
+    EasyEffects, it **kills** it — process dead, `easyeffects_sink`/`_source` gone,
+    and `app-com.github.wwmm.easyeffects@autostart.service` left in `failed`. So the
+    relaunch is genuinely load-bearing; without it the mic chain stays dead until
+    the next login. `ensure-easyeffects` now restarts that unit (which also clears
+    the failed state) rather than detaching its own `flatpak run`.
+  - *Also verified:* it must **not** load a preset. The mic's autoload rule
+    (`autoload/input/<samson>:Microphone.json` → `voicechat-tuned`) reapplies it on
+    its own — relaunching with no `-l` came back on `voicechat-tuned`. The old
+    explicit `-l` was redundant *and* unverifiable, since EasyEffects exits 0 for a
+    preset that does not exist; that is how a wrong preset name (`voicechat`, vs the
+    real `voicechat-tuned`) sat here for months while the script logged success.
+  - Note this recovery path has never actually fired in production (0 occurrences
+    Aug 19 2026 → now; every night connects on `attempt 1/6`), and its blast radius
+    is every audio client on the box — it also silently drops `cava`'s audio.
 - **Timer accuracy gotcha (testing only):** systemd timers default to
   `AccuracySec=1min` and coalesce firings within that window. For near-future test
   timers placed <1min apart, add `AccuracySec=1s` or they fire together. The real

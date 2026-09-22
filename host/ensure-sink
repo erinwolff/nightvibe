@@ -61,7 +61,10 @@ fi
 log "recovering: restarting PipeWire stack"
 systemctl --user restart pipewire pipewire-pulse wireplumber
 sleep 4
-# The stack restart drops EasyEffects; bring it back with the user's preset.
+# The stack restart kills EasyEffects outright (process dies, its nodes vanish,
+# its autostart unit goes to 'failed'), so relaunch it — the preset reapplies
+# itself via the mic's autoload rule. Best-effort: a dead mic chain is bad, but
+# it must never stop the music from starting.
 "$HERE/ensure-easyeffects" || true
 
 if SINK="$(connect_and_verify)"; then
