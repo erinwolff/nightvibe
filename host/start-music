@@ -71,11 +71,20 @@ log "audio path healthy, sink=$SINK"
 #
 # Both keep the native 44.1 kHz — unlike loudnorm, which forces mpv into an
 # internal 192 kHz resample.
+#
+# --no-input-terminal + --msg-level=all=error,ao=v replaces --no-terminal, which
+# silenced mpv completely. The stutter reported 2026-09-19..22 leaves no trace in
+# any log, so this lets the audio-output layer speak up (underruns, device errors)
+# into the journal under music-night.service, while staying quiet otherwise —
+# measured at 11 lines at startup and nothing after. Do NOT use --log-file: it is
+# pinned to debug level and wrote ~3k lines for a 3-second clip.
+# Caveat: if the dropout is on the RF side, PipeWire keeps feeding the sink happily
+# and mpv may never see an underrun — absence here is not proof the link was fine.
 exec mpv --ao=pulse \
   --audio-device="pulse/$SINK" \
   --shuffle --loop-playlist=inf \
   --input-ipc-server="$SOCK" \
   --volume="$VOLUME" \
   --af=dynaudnorm=f=500:g=31:p=0.9:m=8:s=12,alimiter=limit=0.891:level=false \
-  --no-video --no-terminal \
+  --no-video --no-input-terminal --msg-level=all=error,ao=v \
   "$PLAYLIST"

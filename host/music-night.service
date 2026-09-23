@@ -19,13 +19,19 @@ ExecStopPost=/usr/local/bin/bt-disconnect
 # bt-assert can fail if the speaker is off at 23:00; keep retrying so it starts
 # whenever the speaker comes online (within the 23:00-08:00 window).
 #
-# Restart=always, not on-failure: when the A2DP transport drops mid-night
-# (wireplumber logs "Failure in Bluetooth audio transport"), mpv loses its audio
-# device and exits *successfully* — so on-failure never fired and the night just
-# went silent until 08:00 (this is what happened 2026-09-20 at 23:26). An explicit
-# `systemctl stop` (how music-stop.service ends the night at 08:00) still never
-# triggers a restart, so always is safe here.
-Restart=always
+# MUST stay on-failure. A manual stop from the web app sends mpv `quit`, which
+# exits 0 — under on-failure that ends the night, which is the whole point of a
+# stop button. Restart=always was tried on 2026-09-21 and was a straight
+# regression: stopping from the app just brought the music back 30s later, every
+# time, with no way to make it stop.
+#
+# It was changed on the theory that a mid-night "Failure in Bluetooth audio
+# transport" killed playback silently. That reading was wrong: those log lines
+# appear 1-2s BEFORE ExecStopPost's bt-disconnect, i.e. they are the transport
+# being torn down as mpv exits, not a spontaneous drop. Every one of them
+# reconnected on `attempt 1/6` immediately afterwards, which a genuinely broken
+# link does not do. They were her pressing stop.
+Restart=on-failure
 RestartSec=30
 
 [Install]
